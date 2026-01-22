@@ -2,38 +2,37 @@ name: Build iOS IPA
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-15 # macOS 15 includes Xcode 16+
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
+    - name: Select Xcode Version
+      run: sudo xcode-select -s /Applications/Xcode_16.0.app
+
     - name: Install depot_tools
       run: |
-        cd $HOME
-        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git $HOME/depot_tools
         echo "$HOME/depot_tools" >> $GITHUB_PATH
 
     - name: Fetch Chromium Source
       run: |
-        cd $HOME
         mkdir -p ~/chromium && cd ~/chromium
-        fetch --no-history ios 
+        $HOME/depot_tools/fetch --no-history ios 
         cd src
-        gclient sync
+        $HOME/depot_tools/gclient sync
 
     - name: Generate Build Files
       run: |
-        cd ~/chromium/src && mkdir -p out/Release-iphoneos
+        cd ~/chromium/src
         gn gen out/Release-iphoneos --args='is_debug=false target_os="ios" ios_enable_code_signing=false is_component_build=false target_environment="device" target_cpu="arm64" use_blink=true'
 
     - name: Build Chromium for iOS
@@ -45,7 +44,7 @@ jobs:
       run: |
         cd ~/chromium/src/out/Release-iphoneos
         mkdir -p Payload
-        cp -r chromium.app Payload/
+        cp -r chrome.app Payload/ # Chromium builds usually output chrome.app
         zip -r chromium.ipa Payload
 
     - name: Upload Artifact
