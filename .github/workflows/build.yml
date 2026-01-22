@@ -9,14 +9,15 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15 # macOS 15 includes Xcode 16+
+    # Use the macOS 26 runner for Xcode 26 support
+    runs-on: macos-26
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Select Xcode Version
-      run: sudo xcode-select -s /Applications/Xcode_16.0.app
+    - name: Select Xcode 26.0
+      run: sudo xcode-select -s /Applications/Xcode_26.0.app
 
     - name: Install depot_tools
       run: |
@@ -26,9 +27,9 @@ jobs:
     - name: Fetch Chromium Source
       run: |
         mkdir -p ~/chromium && cd ~/chromium
-        $HOME/depot_tools/fetch --no-history ios 
+        fetch --no-history ios 
         cd src
-        $HOME/depot_tools/gclient sync
+        gclient sync
 
     - name: Generate Build Files
       run: |
@@ -44,7 +45,7 @@ jobs:
       run: |
         cd ~/chromium/src/out/Release-iphoneos
         mkdir -p Payload
-        cp -r chrome.app Payload/ # Chromium builds usually output chrome.app
+        cp -r chrome.app Payload/
         zip -r chromium.ipa Payload
 
     - name: Upload Artifact
