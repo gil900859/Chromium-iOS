@@ -12,13 +12,23 @@ jobs:
     runs-on: macos-26
     permissions:
       contents: read
-      actions: write  # Required for GITHUB_TOKEN to trigger dispatches
+      actions: write
     env:
       SCCACHE_GHA_ENABLED: "true"
     
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
+
+    - name: Free Disk Space
+      run: |
+        # Wipe older SDKs/Apps to make room for Chromium's 40GB+ source
+        sudo rm -rf /Applications/Xcode_15*.app
+        sudo rm -rf /Applications/Xcode_16*.app
+        sudo xcode-select -s /Applications/Xcode_26.0.app
+        sudo rm -rf /usr/local/share/boost
+        sudo rm -rf /usr/local/lib/node_modules
+        df -h
 
     - name: Set up sccache
       uses: mozilla-actions/sccache-action@v0.0.5
@@ -30,20 +40,17 @@ jobs:
           core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
           core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-    - name: Select Xcode 26.0
-      run: sudo xcode-select -s /Applications/Xcode_26.0.app
-
     - name: Install depot_tools
       run: |
-        git clone https://chromium.googlesource.com $HOME/depot_tools
+        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git $HOME/depot_tools
         echo "$HOME/depot_tools" >> $GITHUB_PATH
 
-    - name: Fetch Chromium Source
+    - name: Fetch Chromium Source (Aggressive Pruning)
       run: |
         mkdir -p ~/chromium && cd ~/chromium
-        fetch --no-history ios 
+        fetch --no-history --shallow ios 
         cd src
-        gclient sync
+        gclient sync --no-history --delete_unversioned_trees --reset
 
     - name: Generate Build Files
       run: |
@@ -54,7 +61,7 @@ jobs:
       id: build_step
       run: |
         cd ~/chromium/src
-        # Exit gracefully to ensure sccache uploads progress before GitHub kills the job
+        # Exit gracefully before the 6h GitHub limit to allow cache upload
         timeout 19800 autoninja -C out/Release-iphoneos chrome || echo "BUILD_INCOMPLETE=true" >> $GITHUB_ENV
 
     - name: Save Cache & Stats
