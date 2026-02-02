@@ -3,14 +3,16 @@ name: Build iOS IPA
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
+  repository_dispatch:
+    types: [resume_build]
 
 jobs:
   build:
-    # Explicitly using the macOS 26 runner for Xcode 26 support
-    runs-on: macos-26 
+    runs-on: macos-26
+    permissions:
+      contents: read
+      actions: write  # Required for GITHUB_TOKEN to trigger dispatches
     env:
       SCCACHE_GHA_ENABLED: "true"
     
@@ -46,21 +48,21 @@ jobs:
     - name: Generate Build Files
       run: |
         cd ~/chromium/src
-        # Added ccache_prefix for sccache and symbol_level=0 to keep cache small
         gn gen out/Release-iphoneos --args='is_debug=false target_os="ios" ios_enable_code_signing=false is_component_build=false target_environment="device" target_cpu="arm64" use_blink=true ccache_prefix="sccache" symbol_level=0'
 
-    - name: Build Chromium for iOS
+    - name: Build Chromium (5.5h timeout)
+      id: build_step
       run: |
         cd ~/chromium/src
-        # Exit just before the 6-hour mark (19800s = 5.5h) to ensure cache saves
-        timeout 19800 autoninja -C out/Release-iphoneos chrome || echo "Continuing in next run..."
+        # Exit gracefully to ensure sccache uploads progress before GitHub kills the job
+        timeout 19800 autoninja -C out/Release-iphoneos chrome || echo "BUILD_INCOMPLETE=true" >> $GITHUB_ENV
 
-    - name: Save sccache stats
+    - name: Save Cache & Stats
       if: always()
       run: sccache --show-stats
 
     - name: Create .ipa File
-      if: success()
+      if: env.BUILD_INCOMPLETE != 'true'
       run: |
         cd ~/chromium/src/out/Release-iphoneos
         mkdir -p Payload
@@ -68,8 +70,20 @@ jobs:
         zip -r chromium.ipa Payload
 
     - name: Upload Artifact
-      if: success()
+      if: env.BUILD_INCOMPLETE != 'true'
       uses: actions/upload-artifact@v4
       with:
         name: ios-app
         path: ~/chromium/src/out/Release-iphoneos/chromium.ipa
+
+    - name: Trigger Next Run if Incomplete
+      if: always() && env.BUILD_INCOMPLETE == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.repos.createDispatchEvent({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            event_type: 'resume_build',
+            client_payload: { ref: context.ref }
+          })
