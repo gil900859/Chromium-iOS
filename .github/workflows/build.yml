@@ -20,6 +20,7 @@ jobs:
 
     - name: Free Disk Space
       run: |
+        # Wipe older SDKs to make room for 40GB+ Chromium source
         sudo rm -rf /Applications/Xcode_15*.app
         sudo rm -rf /Applications/Xcode_16*.app
         sudo xcode-select -s /Applications/Xcode_26.0.app
@@ -37,7 +38,6 @@ jobs:
           core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
           core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-    # This caches the Chromium source and build objects (~40GB+)
     - name: Cache Chromium Source
       id: cache-chromium
       uses: actions/cache@v4
@@ -69,7 +69,8 @@ jobs:
     - name: Build Chromium (5.5h timeout)
       run: |
         cd ~/chromium/src
-        timeout 19800 autoninja -C out/Release-iphoneos chrome || echo "BUILD_INCOMPLETE=true" >> $GITHUB_ENV
+        # Perl timeout used because macOS lacks the 'timeout' command by default
+        perl -e 'alarm shift; exec @ARGV' 19800 autoninja -C out/Release-iphoneos chrome || echo "BUILD_INCOMPLETE=true" >> $GITHUB_ENV
 
     - name: Save Cache & Stats
       if: always()
