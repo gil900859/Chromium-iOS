@@ -22,7 +22,7 @@ jobs:
 
     - name: Free Disk Space
       run: |
-        # Wipe older SDKs/Apps to make room for Chromium's 40GB+ source
+        # Wipe older SDKs to make room for 40GB+ Chromium source
         sudo rm -rf /Applications/Xcode_15*.app
         sudo rm -rf /Applications/Xcode_16*.app
         sudo xcode-select -s /Applications/Xcode_26.0.app
@@ -45,10 +45,11 @@ jobs:
         git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git $HOME/depot_tools
         echo "$HOME/depot_tools" >> $GITHUB_PATH
 
-    - name: Fetch Chromium Source (Aggressive Pruning)
+    - name: Fetch Chromium Source
       run: |
         mkdir -p ~/chromium && cd ~/chromium
-        fetch --no-history --shallow ios 
+        # --no-history is the correct flag for minimal size
+        fetch --no-history ios 
         cd src
         gclient sync --no-history --delete_unversioned_trees --reset
 
@@ -61,7 +62,7 @@ jobs:
       id: build_step
       run: |
         cd ~/chromium/src
-        # Exit gracefully before the 6h GitHub limit to allow cache upload
+        # Exit gracefully to allow sccache to finalize before the 6h runner limit
         timeout 19800 autoninja -C out/Release-iphoneos chrome || echo "BUILD_INCOMPLETE=true" >> $GITHUB_ENV
 
     - name: Save Cache & Stats
